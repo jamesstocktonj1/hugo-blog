@@ -108,14 +108,17 @@ jobs:
           sudo install -m 0755 argocd /usr/local/bin/argocd
           argocd version --client
 
-      - name: Sync hugo-blog app
+      - name: Refresh hugo-blog app
         run: |
           # Hard refresh so Argo CD sees the deploy commit instead of its cached manifests.
+          # Auto-sync is on, so Argo CD starts the sync itself. Don't run `app sync` here:
+          # it fails if Argo CD's own sync is already in progress.
           argocd app get hugo-blog --hard-refresh > /dev/null
-          argocd app sync hugo-blog --timeout 300
 
-      - name: Wait for hugo-blog to be healthy
-        run: argocd app wait hugo-blog --health --timeout 300
+      - name: Wait for hugo-blog to be synced and healthy
+        # --sync as well as --health: right after the refresh the app is OutOfSync, so
+        # this can't pass early against the old, still-healthy revision.
+        run: argocd app wait hugo-blog --sync --health --timeout 300
 
       - name: Application summary
         if: always()
