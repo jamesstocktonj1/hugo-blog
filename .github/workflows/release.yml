@@ -77,3 +77,54 @@ jobs:
             git commit -am "deploy: ${GITHUB_SHA::7}"
             git push origin HEAD:main
           }
+
+  # Ask Argo CD to deploy now instead of waiting for its poll (up to ~3 minutes), and
+  # fail the release if the new pods don't come up healthy. The runner joins the
+  # tailnet to reach Argo CD (see docs/TAILSCALE.md in cluster-ops).
+  sync:
+    needs: deploy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    concurrency:
+      group: argocd-sync
+      cancel-in-progress: false
+    env:
+      ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
+      ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
+      # Argo CD serves a self-signed certificate, and --grpc-web works through the proxy.
+      ARGOCD_OPTS: --grpc-web --insecure
+    steps:
+      - name: Setup Tailscale
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TAILSCALE_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TAILSCALE_SECRET }}
+          tags: tag:cicd
+
+      - name: Setup ArgoCD CLI
+        run: |
+          curl -fsSL -o argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+          sudo install -m 0755 argocd /usr/local/bin/argocd
+          argocd version --client
+
+      - name: Sync hugo-blog app
+        run: |
+          # Hard refresh so Argo CD sees the deploy commit instead of its cached manifests.
+          argocd app get hugo-blog --hard-refresh > /dev/null
+          argocd app sync hugo-blog --timeout 300
+
+      - name: Wait for hugo-blog to be healthy
+        run: argocd app wait hugo-blog --health --timeout 300
+
+      - name: Application summary
+        if: always()
+        run: |
+          argocd app get hugo-blog -o json > app.json
+          {
+            echo "## ArgoCD hugo-blog app"
+            echo
+            echo "| Application | Sync | Health | Revision |"
+            echo "| --- | --- | --- | --- |"
+            jq -r '"| \(.metadata.name) | \(.status.sync.status // "Unknown") | \(.status.health.status // "Unknown") | \((.status.sync.revision // "-")[0:7]) |"' app.json
+          } >> "$GITHUB_STEP_SUMMARY"
