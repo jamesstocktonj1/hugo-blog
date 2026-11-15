@@ -23,6 +23,11 @@ menu:
       url: 'https://github.com/jamesstocktonj1'
       params:
         icon: github
+    - name: LinkedIn
+      weight: 5
+      url: 'https://www.linkedin.com/in/james-stockton-233431165'
+      params:
+        icon: linkedin
 
 params:
   description: 'Tech Blog'

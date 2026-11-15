@@ -11,4 +11,4 @@ layout: hextra-home
   This is my tech blog, documenting experiments I try out in my homelab.
 {{< /hextra/hero-subtitle >}}
 
-{{< hextra/hero-button text="Read the posts" link="posts" >}}
+{{< hextra/hero-button text="Read the posts" link="posts" style="margin-top: 1.5rem" >}}
