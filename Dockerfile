@@ -7,7 +7,7 @@ COPY --chown=hugo:hugo . .
 
 RUN hugo build \
     --minify \
-    --baseURL blog.jamesstockton.com
+    --baseURL https://blog.jamesstockton.com/
 
 # runtime container
 FROM nginxinc/nginx-unprivileged:alpine
