@@ -12,7 +12,7 @@ metadata:
   namespace: hugo-blog
 spec:
   replicas: 2   # stateless, so two pods keep the site up through a node loss or rollout
-  revisionHistoryLimit: 0
+  revisionHistoryLimit: 1
   selector:
     matchLabels:
       app: hugo-blog
