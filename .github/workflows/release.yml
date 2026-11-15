@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths-ignore:
-      - deploy/**   # the deploy job's own commits don't need another release
+      - deploy/**
 
 env:
   REGISTRY: ghcr.io
@@ -48,8 +48,6 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # Point the Kubernetes manifest at the image just published. Argo CD (see the
-  # hugo-blog Application in cluster-ops) syncs deploy/ and rolls the pods.
   deploy:
     needs: publish
     runs-on: ubuntu-latest
@@ -61,11 +59,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: main   # latest main, in case another release committed meanwhile
+          ref: main
 
       - name: Set image tag in manifest
         run: |
-          TAG="sha-${GITHUB_SHA::7}"   # matches docker/metadata-action's type=sha
+          TAG="sha-${GITHUB_SHA::7}"
           sed -i -E "s|(image: ${REGISTRY}/${IMAGE_NAME}):.*|\\1:${TAG}|" deploy/hugo-blog.yaml
           grep -q "image: ${REGISTRY}/${IMAGE_NAME}:${TAG}" deploy/hugo-blog.yaml
 
@@ -77,3 +75,48 @@ jobs:
             git commit -am "deploy: ${GITHUB_SHA::7}"
             git push origin HEAD:main
           }
+
+  sync:
+    needs: deploy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    concurrency:
+      group: argocd-sync
+      cancel-in-progress: false
+    env:
+      ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
+      ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
+      ARGOCD_OPTS: --grpc-web --insecure
+    steps:
+      - name: Setup Tailscale
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TAILSCALE_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TAILSCALE_SECRET }}
+          tags: tag:cicd
+
+      - name: Setup ArgoCD CLI
+        run: |
+          curl -fsSL -o argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+          sudo install -m 0755 argocd /usr/local/bin/argocd
+          argocd version --client
+
+      - name: Refresh hugo-blog app
+        run: |
+          argocd app get hugo-blog --hard-refresh > /dev/null
+
+      - name: Wait for hugo-blog to be synced and healthy
+        run: argocd app wait hugo-blog --sync --health --timeout 300
+
+      - name: Application summary
+        if: always()
+        run: |
+          argocd app get hugo-blog -o json > app.json
+          {
+            echo "## ArgoCD hugo-blog app"
+            echo
+            echo "| Application | Sync | Health | Revision |"
+            echo "| --- | --- | --- | --- |"
+            jq -r '"| \(.metadata.name) | \(.status.sync.status // "Unknown") | \(.status.health.status // "Unknown") | \((.status.sync.revision // "-")[0:7]) |"' app.json
+          } >> "$GITHUB_STEP_SUMMARY"
