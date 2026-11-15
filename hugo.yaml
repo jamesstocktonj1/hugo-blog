@@ -1,0 +1,42 @@
+baseURL: 'https://blog.jamesstockton.com/'
+locale: 'en-us'
+title: 'James Stockton - Blog'
+theme: 'hextra'
+
+enableRobotsTXT: true
+enableGitInfo: false
+
+menu:
+  main:
+    - name: Posts
+      pageRef: /posts
+      weight: 1
+    - name: About
+      pageRef: /about
+      weight: 2
+    - name: Search
+      weight: 3
+      params:
+        type: search
+    - name: GitHub
+      weight: 4
+      url: 'https://github.com/jamesstocktonj1'
+      params:
+        icon: github
+
+params:
+  description: 'Tech Blog'
+  navbar:
+    displayTitle: true
+    displayLogo: false
+  footer:
+    displayCopyright: true
+    displayPoweredBy: true
+  page:
+    width: normal
+  theme:
+    default: system
+    displayToggle: true
+  search:
+    enable: true
+    type: flexsearch

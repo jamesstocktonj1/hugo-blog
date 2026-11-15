@@ -5,9 +5,7 @@ WORKDIR /project
 
 COPY --chown=hugo:hugo . .
 
-RUN hugo build \
-    --minify \
-    --baseURL https://blog.jamesstockton.com/
+RUN hugo build --minify
 
 # runtime container
 FROM nginxinc/nginx-unprivileged:alpine
