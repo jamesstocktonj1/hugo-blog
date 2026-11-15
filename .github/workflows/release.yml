@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths-ignore:
-      - deploy/**   # the deploy job's own commits don't need another release
+      - deploy/**
 
 env:
   REGISTRY: ghcr.io
@@ -48,8 +48,6 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # Point the Kubernetes manifest at the image just published. Argo CD (see the
-  # hugo-blog Application in cluster-ops) syncs deploy/ and rolls the pods.
   deploy:
     needs: publish
     runs-on: ubuntu-latest
@@ -61,11 +59,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: main   # latest main, in case another release committed meanwhile
+          ref: main
 
       - name: Set image tag in manifest
         run: |
-          TAG="sha-${GITHUB_SHA::7}"   # matches docker/metadata-action's type=sha
+          TAG="sha-${GITHUB_SHA::7}"
           sed -i -E "s|(image: ${REGISTRY}/${IMAGE_NAME}):.*|\\1:${TAG}|" deploy/hugo-blog.yaml
           grep -q "image: ${REGISTRY}/${IMAGE_NAME}:${TAG}" deploy/hugo-blog.yaml
 
@@ -78,9 +76,6 @@ jobs:
             git push origin HEAD:main
           }
 
-  # Ask Argo CD to deploy now instead of waiting for its poll (up to ~3 minutes), and
-  # fail the release if the new pods don't come up healthy. The runner joins the
-  # tailnet to reach Argo CD (see docs/TAILSCALE.md in cluster-ops).
   sync:
     needs: deploy
     runs-on: ubuntu-latest
@@ -92,7 +87,6 @@ jobs:
     env:
       ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
       ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
-      # Argo CD serves a self-signed certificate, and --grpc-web works through the proxy.
       ARGOCD_OPTS: --grpc-web --insecure
     steps:
       - name: Setup Tailscale
@@ -110,14 +104,9 @@ jobs:
 
       - name: Refresh hugo-blog app
         run: |
-          # Hard refresh so Argo CD sees the deploy commit instead of its cached manifests.
-          # Auto-sync is on, so Argo CD starts the sync itself. Don't run `app sync` here:
-          # it fails if Argo CD's own sync is already in progress.
           argocd app get hugo-blog --hard-refresh > /dev/null
 
       - name: Wait for hugo-blog to be synced and healthy
-        # --sync as well as --health: right after the refresh the app is OutOfSync, so
-        # this can't pass early against the old, still-healthy revision.
         run: argocd app wait hugo-blog --sync --health --timeout 300
 
       - name: Application summary
