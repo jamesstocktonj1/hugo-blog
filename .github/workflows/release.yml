@@ -3,6 +3,8 @@ name: Release
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - deploy/**   # the deploy job's own commits don't need another release
 
 env:
   REGISTRY: ghcr.io
@@ -45,3 +47,33 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # Point the Kubernetes manifest at the image just published. Argo CD (see the
+  # hugo-blog Application in cluster-ops) syncs deploy/ and rolls the pods.
+  deploy:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: deploy
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main   # latest main, in case another release committed meanwhile
+
+      - name: Set image tag in manifest
+        run: |
+          TAG="sha-${GITHUB_SHA::7}"   # matches docker/metadata-action's type=sha
+          sed -i -E "s|(image: ${REGISTRY}/${IMAGE_NAME}):.*|\\1:${TAG}|" deploy/hugo-blog.yaml
+          grep -q "image: ${REGISTRY}/${IMAGE_NAME}:${TAG}" deploy/hugo-blog.yaml
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git diff --quiet || {
+            git commit -am "deploy: ${GITHUB_SHA::7}"
+            git push origin HEAD:main
+          }

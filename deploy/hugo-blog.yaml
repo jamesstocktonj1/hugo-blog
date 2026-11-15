@@ -1,0 +1,66 @@
+# The blog: a stateless static site (Deployment + ClusterIP Service), deployed by the
+# hugo-blog Argo CD Application in the cluster-ops repo (apps/hugo-blog.yaml).
+#
+#   browser -> Cloudflare -> tunnel -> cloudflared -> hugo-blog Service :80 -> pod :8080
+#
+# The image tag below is rewritten by the "deploy" job in .github/workflows/release.yml
+# on every release. Don't edit it by hand unless you're rolling back.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hugo-blog
+  namespace: hugo-blog
+spec:
+  replicas: 2   # stateless, so two pods keep the site up through a node loss or rollout
+  selector:
+    matchLabels:
+      app: hugo-blog
+  template:
+    metadata:
+      labels:
+        app: hugo-blog
+    spec:
+      # Spread across Proxmox hosts; never block a rollout.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: hugo-blog
+      containers:
+        - name: hugo-blog
+          image: ghcr.io/jamesstocktonj1/hugo-blog:sha-51181de
+          ports:
+            - name: http
+              containerPort: 8080   # nginx-unprivileged listens on 8080
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hugo-blog
+  namespace: hugo-blog
+spec:
+  type: ClusterIP
+  selector:
+    app: hugo-blog
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
