@@ -1,0 +1,6 @@
+.git
+public
+resources
+.hugo_build.lock
+Dockerfile
+.dockerignore
