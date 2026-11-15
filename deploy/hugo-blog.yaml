@@ -30,7 +30,7 @@ spec:
               app: hugo-blog
       containers:
         - name: hugo-blog
-          image: ghcr.io/jamesstocktonj1/hugo-blog:sha-51181de
+          image: ghcr.io/jamesstocktonj1/hugo-blog:sha-212b7d1
           ports:
             - name: http
               containerPort: 8080   # nginx-unprivileged listens on 8080
